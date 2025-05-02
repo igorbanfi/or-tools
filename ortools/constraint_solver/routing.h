@@ -3430,6 +3430,8 @@ class RoutingDimension {
   /// infinite breaks.
   void SetBreakDistanceDurationOfVehicle(int64_t distance, int64_t duration,
                                          int vehicle);
+  /// Set dimension to be used in break minimal required slack
+  void SetBreakSlackDimension(RoutingDimension* slack_dimension);
   /// Sets up vehicle_break_intervals_, vehicle_break_distance_duration_,
   /// pre_travel_evaluators and post_travel_evaluators.
   void InitializeBreaks();
@@ -3452,6 +3454,7 @@ class RoutingDimension {
   const std::vector<std::pair<int64_t, int64_t> >&
       GetBreakDistanceDurationOfVehicle(int vehicle) const;
   // clang-format on
+  RoutingDimension* GetBreakSlackDimension() const;
 #endif  /// !defined(SWIGPYTHON)
   int GetPreTravelEvaluatorOfVehicle(int vehicle) const;
   int GetPostTravelEvaluatorOfVehicle(int vehicle) const;
@@ -3761,6 +3764,8 @@ class RoutingDimension {
   std::vector<std::vector<std::pair<int64_t, int64_t> > >
       vehicle_break_distance_duration_;
   // clang-format on
+  // Use this timension for slack requirements of breaks
+  RoutingDimension* slack_dimension_ = nullptr;
   // For each vehicle, stores the part of travel that is made directly
   // after (before) the departure (arrival) node of the travel.
   // These parts of the travel are non-interruptible, in particular by a break.

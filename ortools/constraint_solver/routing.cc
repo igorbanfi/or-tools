@@ -7494,11 +7494,20 @@ void RoutingDimension::SetBreakDistanceDurationOfVehicle(int64_t distance,
                                        std::numeric_limits<int64_t>::max());
 }
 
+void RoutingDimension::SetBreakSlackDimension(
+    RoutingDimension* slack_dimension) {
+  slack_dimension_ = slack_dimension;
+}
+
 const std::vector<std::pair<int64_t, int64_t>>&
 RoutingDimension::GetBreakDistanceDurationOfVehicle(int vehicle) const {
   DCHECK_LE(0, vehicle);
   DCHECK_LT(vehicle, vehicle_break_distance_duration_.size());
   return vehicle_break_distance_duration_[vehicle];
+}
+
+RoutingDimension* RoutingDimension::GetBreakSlackDimension() const {
+  return slack_dimension_;
 }
 
 void RoutingDimension::SetPickupToDeliveryLimitFunctionForPair(

@@ -737,6 +737,10 @@ void GlobalVehicleBreaksConstraint::Post() {
     if (node < num_nexts) {
       model_->NextVar(node)->WhenBound(dimension_demon);
       dimension_->SlackVar(node)->WhenRange(dimension_demon);
+      if (dimension_->GetBreakSlackDimension() != nullptr) {
+        dimension_->GetBreakSlackDimension()->SlackVar(node)->WhenRange(
+            dimension_demon);
+      }
     }
     model_->VehicleVar(node)->WhenBound(dimension_demon);
     dimension_->CumulVar(node)->WhenRange(dimension_demon);
@@ -887,6 +891,10 @@ void GlobalVehicleBreaksConstraint::PropagateVehicle(int vehicle) {
       }
     }
     dimension_->SlackVar(path_[i])->SetMin(total_break_inside_arc);
+    if (dimension_->GetBreakSlackDimension() != nullptr) {
+      dimension_->GetBreakSlackDimension()->SlackVar(path_[i])->SetMin(
+          total_break_inside_arc);
+    }
   }
   // Reasoning on optional intervals.
   // TODO(user): merge this with energy-based reasoning.
@@ -905,7 +913,13 @@ void GlobalVehicleBreaksConstraint::PropagateVehicle(int vehicle) {
   const std::vector<IntervalVar*>& break_intervals =
       dimension_->GetBreakIntervalsOfVehicle(vehicle);
   for (int pos = 0; pos < num_nodes - 1; ++pos) {
-    const int64_t current_slack_max = dimension_->SlackVar(path_[pos])->Max();
+    int64_t current_slack_max;
+    if (dimension_->GetBreakSlackDimension() == nullptr) {
+      current_slack_max = dimension_->SlackVar(path_[pos])->Max();
+    } else {
+      current_slack_max =
+          dimension_->GetBreakSlackDimension()->SlackVar(path_[pos])->Max();
+    }
     const int64_t visit_start_offset =
         pos > 0 ? travel_bounds_.post_travels[pos - 1] : 0;
     const int64_t visit_start_max =
