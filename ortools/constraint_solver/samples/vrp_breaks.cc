@@ -71,7 +71,8 @@ struct DataModel {
 //! @param[in] solution Solution found by the solver.
 // [START solution_printer]
 void PrintSolution(const RoutingIndexManager& manager,
-                   const RoutingModel& routing, const Assignment& solution) {
+                   const RoutingModel& routing, const Assignment& solution,
+                   const DataModel& data) {
   LOG(INFO) << "Objective: " << solution.ObjectiveValue();
 
   LOG(INFO) << "Breaks:";
@@ -95,10 +96,17 @@ void PrintSolution(const RoutingIndexManager& manager,
     LOG(INFO) << "Route for Vehicle " << vehicle_id << ":";
     int64_t index = routing.Start(vehicle_id);
     std::stringstream route;
+    int64_t prev_index = index;
     while (!routing.IsEnd(index)) {
       const IntVar* time_var = time_dimension.CumulVar(index);
+      const int from_node = manager.IndexToNode(prev_index).value();
+      const int to_node = manager.IndexToNode(index).value();
       route << manager.IndexToNode(index).value() << " Time("
-            << solution.Value(time_var) << ") -> ";
+            << solution.Value(time_var) << ") TransitTime("
+            << data.time_matrix[from_node][to_node] +
+                   data.service_time[from_node]
+            << ") -> ";
+      prev_index = index;
       index = solution.Value(routing.NextVar(index));
     }
     const IntVar* time_var = time_dimension.CumulVar(index);
@@ -144,6 +152,18 @@ void VrpBreaks() {
       });
   // [END transit_callback]
 
+  // Create and registed a driving callback
+  // [START drive_callback]
+  const int drive_callback_index = routing.RegisterTransitCallback(
+      [&data, &manager](const int64_t from_index,
+                        const int64_t to_index) -> int64_t {
+        // Convert from routing variable Index to distance matrix NodeIndex.
+        const int from_node = manager.IndexToNode(from_index).value();
+        const int to_node = manager.IndexToNode(to_index).value();
+        return data.time_matrix[from_node][to_node];
+      });
+  // [END drive_callback]
+
   // Define cost of each arc.
   // [START arc_cost]
   routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index);
@@ -160,14 +180,26 @@ void VrpBreaks() {
   time_dimension->SetGlobalSpanCostCoefficient(10);
   // [END time_constraint]
 
+  // Add DriveRestDimension
+  // [START drive_rest_dim]
+  routing.AddDimension(drive_callback_index, 10, 180, true, "DriveRestDim");
+  RoutingDimension* drive_time_dimension =
+      routing.GetMutableDimension("DriveRestDim");
+
+  Solver* const solver = routing.solver();
+  // for (int index = 0; index < routing.Size(); index++) {
+  //   solver->AddConstraint(
+  //       solver->MakeLessOrEqual(drive_time_dimension->SlackVar(index),
+  //                               time_dimension->SlackVar(index)));
+  // }
+
   // Add Breaks
   std::vector<int64_t> service_times(routing.Size());
   for (int index = 0; index < routing.Size(); index++) {
     const RoutingIndexManager::NodeIndex node = manager.IndexToNode(index);
-    service_times[index] = data.service_time[node.value()];
+    service_times[index] = 0;  // data.service_time[node.value()];
   }
 
-  Solver* const solver = routing.solver();
   for (int vehicle = 0; vehicle < manager.num_vehicles(); ++vehicle) {
     std::vector<IntervalVar*> break_intervals;
     IntervalVar* const break_interval = solver->MakeFixedDurationIntervalVar(
@@ -178,8 +210,9 @@ void VrpBreaks() {
         absl::StrCat("Break for vehicle ", vehicle));
     break_intervals.push_back(break_interval);
 
-    time_dimension->SetBreakIntervalsOfVehicle(break_intervals, vehicle,
-                                               service_times);
+    drive_time_dimension->SetBreakIntervalsOfVehicle(break_intervals, vehicle,
+                                                     service_times);
+    drive_time_dimension->SetBreakSlackDimension(time_dimension);
   }
 
   // Setting first solution heuristic.
@@ -187,6 +220,7 @@ void VrpBreaks() {
   RoutingSearchParameters searchParameters = DefaultRoutingSearchParameters();
   searchParameters.set_first_solution_strategy(
       FirstSolutionStrategy::PATH_CHEAPEST_ARC);
+  searchParameters.set_log_search(true);
   // [END parameters]
 
   // Solve the problem.
@@ -197,7 +231,7 @@ void VrpBreaks() {
   // Print solution on console.
   // [START print_solution]
   if (solution != nullptr) {
-    PrintSolution(manager, routing, *solution);
+    PrintSolution(manager, routing, *solution, data);
   } else {
     LOG(INFO) << "No solution found.";
   }
